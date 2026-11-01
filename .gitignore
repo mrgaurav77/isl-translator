@@ -1,0 +1,76 @@
+# ==========================================
+# Indian Sign Language (ISL) Translator
+# GitHub .gitignore Configuration
+# ==========================================
+
+# 1. Virtual Environments (Do not push local packages)
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+.env/
+
+# 2. Byte-compiled / Cache files (Compiled bytecode)
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+*.pyo
+
+# 3. Large Machine Learning Model Binaries (>100MB exceeds GitHub file limits)
+# Note: models/isl_labels.json is tracked; isl_model.pkl (~582MB) is auto-generated on first launch
+models/*.pkl
+models/*.h5
+models/*.joblib
+models/*.pt
+models/*.onnx
+!models/isl_labels.json
+!models/.gitkeep
+
+# 4. Uploaded & Temporary Video / Image Processing Dumps
+data/
+data/samples/
+isl_uploads/
+temp/
+tmp/
+*.mp4
+*.avi
+*.mov
+*.webm
+*.mkv
+
+# 5. Local Database & Persistence
+*.db
+*.sqlite
+*.sqlite3
+mongo_data/
+
+# 6. Operating System Specific Files
+Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# 7. Code Editors & IDE Settings
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+
+# 8. Environment Secrets & Local Configs
+.env
+.env.local
+.env.*.local
+
+# 9. Logs & Runtime Output
+*.log
+logs/
+

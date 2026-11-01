@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Indian Sign Language (ISL) Translator</title>
+
+  <!-- Tailwind CSS & Font Awesome -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap"
+    rel="stylesheet">
+
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body class="flex flex-col min-h-screen text-slate-100">
+
+  <!-- ================= APP HEADER ================= -->
+  <header class="app-header px-6 py-3.5 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-lg">
+        <i class="fa-solid fa-hands-asl-interpreting"></i>
+      </div>
+      <div>
+        <h1 class="text-base font-bold text-white tracking-tight">
+          Indian Sign Language (ISL) Translator
+        </h1>
+        <p class="text-xs text-slate-400">Real-Time Camera & Video Story Translation (English & Hindi)</p>
+      </div>
+    </div>
+
+    <!-- Right Controls: Voice Language, User Account & Status -->
+    <div class="flex items-center gap-3">
+      <!-- Voice Language Selector -->
+      <div class="flex items-center gap-1.5 text-xs">
+        <span class="text-slate-400 hidden md:inline">Voice:</span>
+        <div class="segment-group">
+          <button id="btnVoiceLangHindi" class="segment-btn active" onclick="app.setVoiceLanguage('hindi')">
+            🇮🇳 हिंदी
+          </button>
+          <button id="btnVoiceLangEnglish" class="segment-btn" onclick="app.setVoiceLanguage('english')">
+            🇬🇧 English
+          </button>
+        </div>
+      </div>
+
+      <!-- Authentication Pill / Guest vs Logged In -->
+      <div id="authHeaderGuest" class="flex items-center">
+        <button id="btnOpenAuthModal" class="btn btn-outline text-xs py-1.5 px-3">
+          <i class="fa-regular fa-circle-user mr-1"></i> Sign In / Register
+        </button>
+      </div>
+
+      <div id="authHeaderUser" class="hidden flex items-center gap-2">
+        <button id="btnOpenSavedStories" class="btn btn-secondary text-xs py-1.5 px-2.5" title="View my saved stories in MongoDB">
+          <i class="fa-solid fa-bookmark text-blue-400 mr-1"></i> My Stories (<span id="userStoriesCount">0</span>)
+        </button>
+        <div class="flex items-center gap-1.5 text-xs text-slate-200 bg-slate-800 px-2.5 py-1.5 rounded-md border border-slate-700">
+          <i class="fa-solid fa-user text-slate-400"></i>
+          <span id="headerUsername" class="font-medium">User</span>
+        </div>
+        <button id="btnLogout" class="btn btn-outline text-xs py-1.5 px-2 text-slate-400 hover:text-red-400" title="Log Out">
+          <i class="fa-solid fa-right-from-bracket"></i>
+        </button>
+      </div>
+
+      <!-- System Status -->
+      <div class="hidden lg:flex items-center gap-2 text-xs text-slate-300 bg-slate-800/80 px-2.5 py-1.5 rounded-md border border-slate-700">
+        <span class="status-dot"></span>
+        <span>Ready</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= MAIN WORKSPACE ================= -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+      <!-- ================= LEFT COLUMN: VISION & RECOGNITION (5 COLS) ================= -->
+      <div class="lg:col-span-5 space-y-4">
+
+        <!-- Video Stream Box -->
+        <div class="panel p-3 space-y-3">
+          <div class="video-viewport">
+            <img id="videoStreamImg" src="/video_feed" alt="ISL Video Stream" class="video-stream-img">
+            <video id="browserVideo" autoplay playsinline muted class="video-stream-canvas hidden"></video>
+            <canvas id="browserCanvas" class="hidden"></canvas>
+
+            <!-- Video Overlay Tags -->
+            <div class="hud-overlay p-3 flex flex-col justify-between">
+              <div class="flex items-center justify-between">
+                <span class="hud-tag text-slate-200">
+                  <span class="status-dot"></span> Hand Tracking
+                </span>
+                <span class="hud-tag text-slate-300">
+                  <i class="fa-solid fa-hands"></i> Dual-Hand Active
+                </span>
+              </div>
+              <div class="text-center">
+                <span class="hud-tag text-slate-300 text-[11px]">
+                  Pause 2s to complete each sentence into the story
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Camera Controls Bar -->
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs text-slate-400">
+            <div class="flex items-center gap-2">
+              <i class="fa-solid fa-video text-slate-400"></i>
+              <select id="cameraSourceSelect" class="text-xs">
+                <option value="server">Server Camera (OpenCV)</option>
+                <option value="browser">Browser WebRTC Camera</option>
+              </select>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <button id="btnUploadVideo" class="btn btn-secondary text-xs py-1.5 px-3">
+                <i class="fa-solid fa-upload"></i> Upload Video
+              </button>
+              <input type="file" id="videoFileInput" accept="video/mp4,video/webm,video/avi,video/quicktime"
+                class="hidden">
+
+              <button onclick="fetch('/api/camera/toggle', {method:'POST'})"
+                class="btn btn-secondary text-xs py-1.5 px-3">
+                <i class="fa-solid fa-power-off text-emerald-400"></i> Toggle Cam
+              </button>
+            </div>
+          </div>
+
+          <!-- Video Uploading Status Banner -->
+          <div id="videoUploadStatus"
+            class="hidden p-2 rounded bg-blue-950/60 border border-blue-500/30 text-xs text-blue-300 flex items-center gap-2">
+            <i class="fa-solid fa-circle-notch fa-spin"></i>
+            <span>Processing video translation...</span>
+          </div>
+        </div>
+
+        <!-- Real-Time Detected Sign Card -->
+        <div class="panel p-4 space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-700/60 pb-2">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              Current Detected Gesture
+            </span>
+            <span id="stabilityBadge"
+              class="px-2 py-0.5 text-xs font-medium rounded bg-slate-800 text-slate-400 border border-slate-700">
+              STANDBY
+            </span>
+          </div>
+
+          <!-- Sign Readouts (English & Hindi) -->
+          <div class="panel-card p-3.5 space-y-2">
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <span
+                  class="text-[11px] uppercase tracking-wider font-medium text-slate-400 block mb-0.5">English</span>
+                <div id="heroSignChar" class="text-2xl font-bold text-white tracking-wide">
+                  —
+                </div>
+              </div>
+              <div>
+                <span class="text-[11px] uppercase tracking-wider font-medium text-slate-400 block mb-0.5">हिंदी
+                  (Hindi)</span>
+                <div id="heroSignHindi" class="text-2xl font-bold text-blue-400 font-hindi">
+                  —
+                </div>
+              </div>
+            </div>
+
+            <!-- Accuracy / Confidence Progress -->
+            <div class="pt-2 border-t border-slate-700/50 space-y-1">
+              <div class="flex items-center justify-between text-xs">
+                <span class="text-slate-400">Recognition Accuracy</span>
+                <span id="confidenceVal" class="font-mono font-semibold text-slate-200">0%</span>
+              </div>
+              <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                <div id="confidenceBar" class="h-full bg-blue-600 rounded-full w-0 transition-all duration-150"></div>
+              </div>
+              <p id="heroSignDesc" class="text-xs text-slate-400 pt-0.5 truncate">
+                Make sign gestures in front of the camera.
+              </p>
+            </div>
+          </div>
+
+          <!-- Alternative Predictions -->
+          <div class="pt-1">
+            <span class="text-[11px] text-slate-500 uppercase font-medium">Alternative Predictions:</span>
+            <div id="topCandidatesList" class="text-xs text-slate-400 mt-1 space-y-0.5">
+              <span>Awaiting gestures...</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Voice & Audio Configuration -->
+        <div class="panel p-4 space-y-3">
+          <div class="flex items-center justify-between text-xs">
+            <span class="font-semibold text-slate-300">
+              <i class="fa-solid fa-volume-high text-slate-400 mr-1"></i> Voice Settings
+            </span>
+            <label class="flex items-center gap-1.5 cursor-pointer text-slate-300">
+              <input type="checkbox" id="autoSpeakToggle" checked
+                class="rounded border-slate-700 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5">
+              <span>Auto-Speak</span>
+            </label>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3 text-xs">
+            <div>
+              <label class="text-slate-400 block mb-1">Voice Timing</label>
+              <select id="speechModeSelect" class="w-full text-xs">
+                <option value="instant" selected>Instant (Speaks every sign)</option>
+                <option value="sentence">Sentence (Speaks on pause)</option>
+                <option value="story">Story Only (Manual read)</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-slate-400 block mb-1">Speech Speed</label>
+              <div class="flex items-center gap-2 pt-1">
+                <input type="range" id="rateSlider" min="0.7" max="1.5" step="0.1" value="1.0"
+                  class="w-full accent-blue-600">
+                <span id="rateVal" class="font-mono text-slate-300 text-xs w-8 text-right">1.0x</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="hidden">
+            <select id="voiceSelect"></select>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ================= RIGHT COLUMN: SENTENCE & FULL STORY (7 COLS) ================= -->
+      <div class="lg:col-span-7 space-y-4">
+
+        <!-- Active Sentence Being Formed Right Now -->
+        <div class="panel p-4 space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-700/60 pb-2 text-xs">
+            <span class="font-semibold text-slate-300 uppercase tracking-wider">
+              Current Sentence in Progress
+            </span>
+            <div class="flex items-center gap-1.5 text-slate-400">
+              <span>Active Word:</span>
+              <span id="currentWordBadge"
+                class="px-2 py-0.5 rounded bg-slate-800 text-blue-400 font-mono font-semibold border border-slate-700">
+                —
+              </span>
+            </div>
+          </div>
+
+          <!-- Sentence Preview Box (English & Hindi) -->
+          <div class="panel-card p-3.5 space-y-2">
+            <div>
+              <span class="text-[11px] font-medium text-slate-400 uppercase tracking-wider block">Natural
+                English:</span>
+              <p id="liveSentencePolished" class="text-base font-medium text-white leading-relaxed min-h-[1.5rem]">
+                Waiting for signer to begin...
+              </p>
+            </div>
+
+            <div class="pt-2 border-t border-slate-700/50">
+              <span class="text-[11px] font-medium text-slate-400 uppercase tracking-wider block">हिंदी अनुवाद
+                (Hindi):</span>
+              <p id="liveSentenceHindi"
+                class="text-base font-medium text-blue-300 font-hindi leading-relaxed min-h-[1.5rem]">
+                सांकेतिक भाषा अनुवाद प्रतीक्षा...
+              </p>
+            </div>
+
+            <div class="pt-2 border-t border-slate-700/50 flex items-center gap-2 text-xs text-slate-400">
+              <span class="text-slate-500">Raw Signs:</span>
+              <span id="liveSentenceRaw" class="font-mono text-slate-300">—</span>
+            </div>
+          </div>
+
+          <!-- Sentence Controls -->
+          <div class="flex flex-wrap items-center gap-2 pt-1">
+            <button id="btnEndSentence" class="btn btn-primary text-xs flex-1 py-2 font-medium">
+              <i class="fa-solid fa-plus"></i> Add Sentence to Story (or pause 2s)
+            </button>
+            <button id="btnSpeakCurrentSentence" class="btn btn-secondary text-xs py-2 px-3">
+              <i class="fa-solid fa-volume-high"></i> Speak
+            </button>
+            <button id="btnAddSpace" class="btn btn-secondary text-xs py-2 px-3">
+              ⎵ Space
+            </button>
+            <button id="btnBackspace" class="btn btn-secondary text-xs py-2 px-3">
+              ⌫ Backspace
+            </button>
+          </div>
+        </div>
+
+        <!-- Full Narrative Story Chronicle -->
+        <div class="panel p-5 space-y-4">
+          <!-- Story Header -->
+          <div
+            class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-700/60">
+            <div>
+              <h2 class="text-base font-bold text-white">Full Story Translation</h2>
+              <p class="text-xs text-slate-400">Continuous narrative assembled from your sign sentences</p>
+            </div>
+
+            <!-- Metrics -->
+            <div class="flex items-center gap-2 text-xs font-mono text-slate-300">
+              <span class="px-2 py-0.5 rounded bg-slate-800 border border-slate-700" id="storySentenceCount">0
+                sentences</span>
+              <span class="px-2 py-0.5 rounded bg-slate-800 border border-slate-700" id="storyWordCount">0 words</span>
+            </div>
+          </div>
+
+          <!-- Story Language Toggle -->
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2 text-xs text-slate-400">
+              <span>View Story in:</span>
+              <div class="segment-group">
+                <button class="segment-btn active story-lang-tab" data-lang="english">English Story</button>
+                <button class="segment-btn story-lang-tab font-hindi" data-lang="hindi">हिंदी कहानी</button>
+              </div>
+            </div>
+
+            <button id="btnLoadDemoStory" class="text-xs text-blue-400 hover:text-blue-300 underline">
+              Load Sample Story
+            </button>
+          </div>
+
+          <!-- Story Text Container -->
+          <div class="panel-card p-4 min-h-[140px] text-slate-100 text-sm leading-relaxed">
+            <p id="storyEnglishText">
+              Your continuous story will weave together here as you sign complete sentences...
+            </p>
+            <p id="storyHindiText" class="font-hindi hidden">
+              पूरी कहानी का हिंदी अनुवाद यहाँ प्रदर्शित होगा...
+            </p>
+          </div>
+
+          <!-- Story Actions -->
+          <div class="flex flex-wrap items-center gap-2 pt-1">
+            <button id="btnNarrateStory" class="btn btn-primary text-sm flex-1 py-2.5 font-semibold">
+              <i class="fa-solid fa-volume-high"></i> Read Full Story Aloud
+            </button>
+            <button id="btnSaveStory" class="btn btn-success text-xs py-2 px-3" title="Save this story to MongoDB database">
+              <i class="fa-solid fa-floppy-disk"></i> Save Story
+            </button>
+            <button id="btnCopyStory" class="btn btn-secondary text-xs py-2 px-3">
+              <i class="fa-regular fa-copy"></i> Copy
+            </button>
+            <button id="btnExportStory" class="btn btn-secondary text-xs py-2 px-3">
+              <i class="fa-solid fa-download"></i> Export (.txt)
+            </button>
+            <button id="btnClearStory" class="btn btn-secondary text-xs py-2 px-3 text-slate-400 hover:text-red-400">
+              <i class="fa-solid fa-rotate-right"></i> Clear
+            </button>
+          </div>
+
+          <!-- Sentence-by-Sentence Breakdown Timeline -->
+          <div class="pt-3 border-t border-slate-700/60 space-y-2">
+            <div class="flex items-center justify-between text-xs text-slate-400">
+              <span class="font-semibold uppercase tracking-wider">Sentence Breakdown</span>
+              <span class="text-[11px] text-slate-500">Timeline of completed thoughts</span>
+            </div>
+            <div id="storySentencesTimeline" class="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+              <span class="text-xs text-slate-500 italic">No completed sentences yet. Pausing for ~2s auto-completes
+                each sentence.</span>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <!-- ================= APP FOOTER ================= -->
+  <footer
+    class="px-6 py-3 border-t border-slate-800 text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2 bg-slate-900/40">
+    <div>Indian Sign Language (ISL) Video to Text & Voice Platform</div>
+    <div>Built for Assistive Communication & Storytelling</div>
+  </footer>
+
+  <!-- ================= AUTH MODAL (LOGIN / REGISTER) ================= -->
+  <div id="authModal" class="modal-backdrop">
+    <div class="modal-dialog p-6 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-700/60 pb-3">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-user-circle text-blue-400 text-lg"></i>
+          <h3 id="authModalTitle" class="text-base font-bold text-white">Sign In to Your Account</h3>
+        </div>
+        <button id="btnCloseAuthModal" class="text-slate-400 hover:text-white text-sm">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Auth Mode Tabs (Sign In / Register) -->
+      <div class="flex border-b border-slate-700 text-xs">
+        <button id="tabAuthLogin" class="flex-1 py-2 font-semibold text-center border-b-2 border-blue-500 text-white">
+          Sign In
+        </button>
+        <button id="tabAuthRegister" class="flex-1 py-2 font-medium text-center text-slate-400 hover:text-white">
+          Create Account
+        </button>
+      </div>
+
+      <!-- Error / Notice Box -->
+      <div id="authErrorNotice" class="hidden p-2.5 rounded bg-red-950/80 border border-red-500/40 text-xs text-red-300"></div>
+
+      <!-- Auth Form -->
+      <form id="authForm" class="space-y-3 text-xs" onsubmit="return false;">
+        <div>
+          <label class="block text-slate-300 mb-1 font-medium">Username</label>
+          <input type="text" id="authUsername" placeholder="Enter username" autocomplete="username" required>
+        </div>
+
+        <div id="authEmailGroup" class="hidden">
+          <label class="block text-slate-300 mb-1 font-medium">Email (Optional)</label>
+          <input type="email" id="authEmail" placeholder="your.email@example.com" autocomplete="email">
+        </div>
+
+        <div>
+          <label class="block text-slate-300 mb-1 font-medium">Password</label>
+          <input type="password" id="authPassword" placeholder="Enter password" autocomplete="current-password" required>
+        </div>
+
+        <div class="pt-2">
+          <button type="submit" id="btnSubmitAuth" class="btn btn-primary w-full py-2.5 text-xs font-semibold">
+            Sign In
+          </button>
+        </div>
+      </form>
+
+      <div class="pt-1 text-center">
+        <button id="btnContinueGuest" class="text-xs text-slate-400 hover:text-slate-200 underline">
+          Continue as Guest (No login needed)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= SAVE STORY MODAL ================= -->
+  <div id="saveStoryModal" class="modal-backdrop">
+    <div class="modal-dialog p-6 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-700/60 pb-3">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-floppy-disk text-emerald-400 text-lg"></i>
+          <h3 class="text-base font-bold text-white">Save Story to Database</h3>
+        </div>
+        <button id="btnCloseSaveModal" class="text-slate-400 hover:text-white text-sm">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <p class="text-xs text-slate-300 leading-relaxed">
+        Save this translation story to your private MongoDB collection (<code class="text-blue-300 font-mono">isl_translator_db.stories</code>).
+      </p>
+
+      <div class="space-y-1.5 text-xs">
+        <label class="block text-slate-300 font-medium">Story Title</label>
+        <input type="text" id="saveStoryTitle" placeholder="e.g., Morning Greeting Story" class="text-xs">
+      </div>
+
+      <div class="panel-card p-3 text-xs space-y-1 max-h-32 overflow-y-auto">
+        <span class="text-slate-500 font-medium uppercase text-[10px]">Preview:</span>
+        <p id="saveStoryPreview" class="text-slate-300 italic truncate"></p>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2">
+        <button id="btnCancelSave" class="btn btn-secondary text-xs py-2 px-3">
+          Cancel
+        </button>
+        <button id="btnConfirmSaveStory" class="btn btn-success text-xs py-2 px-4 font-semibold">
+          <i class="fa-solid fa-check"></i> Save to MongoDB
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MY SAVED STORIES MODAL ================= -->
+  <div id="storiesModal" class="modal-backdrop">
+    <div class="modal-dialog modal-dialog-large p-6 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-700/60 pb-3">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-book-bookmark text-blue-400 text-lg"></i>
+          <h3 class="text-base font-bold text-white">My Saved Stories (MongoDB)</h3>
+        </div>
+        <button id="btnCloseStoriesModal" class="text-slate-400 hover:text-white text-sm">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="flex items-center justify-between text-xs text-slate-400">
+        <span>Stored in local MongoDB Compass (<code class="text-blue-300 font-mono">isl_translator_db</code>)</span>
+        <span id="savedStoriesCounterBadge" class="font-mono text-slate-300">0 stories</span>
+      </div>
+
+      <!-- Stories Scrollable List -->
+      <div id="savedStoriesList" class="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+        <div class="text-center py-8 text-xs text-slate-500">
+          Loading saved stories...
+        </div>
+      </div>
+
+      <div class="flex justify-end pt-2 border-t border-slate-700/60">
+        <button id="btnCloseStoriesModalBottom" class="btn btn-secondary text-xs py-1.5 px-4">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toastNotice" class="toast-notice">
+    <i class="fa-solid fa-circle-check text-blue-400"></i>
+    <span id="toastNoticeMsg" class="text-xs">Notification</span>
+  </div>
+
+  <!-- Main Application Script -->
+  <script src="/static/js/app.js"></script>
+</body>
+
+</html>
